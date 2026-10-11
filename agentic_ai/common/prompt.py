@@ -1,0 +1,1 @@
+JOB_POSTING_PROMPT = "Extract structured data from this job posting:\n\n{}"

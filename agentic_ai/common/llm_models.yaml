@@ -1,0 +1,16 @@
+# Agents call select_model() which returns: local, mid, or cloud
+# Environment variables:
+
+# ── Default Models ────────────────────────────────────────────────────────────
+# Default models for specific tasks - can be overridden per agent
+
+model_default:
+  default: ollama/llama3.1:latest  # Default model for general tasks
+
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+logging_settings:
+  log_level: INFO
+  set_verbose: false
+  drop_params: true
