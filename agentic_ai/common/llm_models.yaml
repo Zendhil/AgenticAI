@@ -14,3 +14,6 @@ logging_settings:
   log_level: INFO
   set_verbose: false
   drop_params: true
+
+embeddings:
+  default: "all-MiniLM-L6-v2"
