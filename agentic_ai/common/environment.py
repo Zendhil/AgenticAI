@@ -22,6 +22,8 @@ class Environment:
     def __init__(self):
         print("init environment")
         self._device:str = self._detect_device()
+        self._graph_db_dtl = self.get_prd_grf_db_details()
+        self._graph_driver = self.get_graph_driver()
 
     def _detect_device(self):
         print("detect device")
@@ -41,10 +43,10 @@ class Environment:
     def get_prd_grf_db_details(self):
         # Use get() to retrieve the DB_URL, defaulting to None if not set
         self._graph_db_dtl = {
-            "PRD_GRF_DB_URI": os.getenv("PRD_GRF_DB_URI"),
-            "PRD_GRF_DB_USER": os.getenv("PRD_GRF_DB_USER"),
-            "PRD_GRF_DB_PWD": os.getenv("PRD_GRF_DB_PWD"),
-            "PRD_GRF_DB":os.getenv("DEFAULT_DATABASE", "neo4j")  # default DB
+            "uri": os.getenv("PRD_GRF_DB_URI"),
+            "user": os.getenv("PRD_GRF_DB_USER"),
+            "pwd": os.getenv("PRD_GRF_DB_PWD"),
+            "db":os.getenv("DEFAULT_DATABASE", "neo4j")  # default DB
         }
 
         for k,v in self._graph_db_dtl.items():
@@ -53,12 +55,7 @@ class Environment:
 
         return self._graph_db_dtl
 
-    def get_graph_driver(self):
-        uri=self._graph_db_dtl.get("PRD_GRF_DB_URI")
-        user = self._graph_db_dtl.get("PRD_GRF_DB_USER")
-        password = self._graph_db_dtl.get("PRD_GRF_DB_PWD")
 
-        AsyncGraphDatabase.driver(uri, auth=(user, password))
 
     def get_device(self)->str:
         print("get device")
