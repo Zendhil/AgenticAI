@@ -3,7 +3,7 @@ import yaml
 import logging
 from pathlib import Path
 import platform
-import torch
+
 
 logger = logging.getLogger(__name__)
 base_dir=Path(__file__).parent
@@ -31,37 +31,10 @@ class Config:
             self._config = self._load_models_config()
         return self._config
 
-class Environment:
-    def __init__(self):
-        print("init environment")
-        self._device:str = self._detect_device()
-
-    def _detect_device(self):
-        print("detect device")
-        self._device = 'cpu'
-
-        if platform.system() == 'Darwin' and torch.backends.mps.is_available():
-            self._device = 'mps'  # Use MPS on Mac
-        # Check for CUDA (NVIDIA GPU)
-        elif torch.cuda.is_available():
-            self._device = 'cuda'  # Use CUDA on Nvidia GPU
-        else:
-            self._device = 'cpu'  # Fallback to CPU if no GPU is available
-        #Todo: TPUs!!!
-        print(f"Running on: {self._device}")  # Log the device used
-        return self._device
-
-    def get_device(self)->str:
-        print("get device")
-        if self._device is None:
-            self._device = self._detect_device()
-        return self._device
-
 config = Config()  #singleton class
 get_config = config._get_config
 
-environment = Environment()
-get_device=environment.get_device
+
 
 if __name__ == '__main__':
     print(get_config())
