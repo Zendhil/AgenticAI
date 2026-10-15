@@ -23,7 +23,6 @@ class Environment:
         print("init environment")
         self._device:str = self._detect_device()
         self._graph_db_dtl = self.get_prd_grf_db_details()
-        self._graph_driver = self.get_graph_driver()
 
     def _detect_device(self):
         print("detect device")

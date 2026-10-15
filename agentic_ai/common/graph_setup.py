@@ -1,5 +1,6 @@
 from neo4j import AsyncGraphDatabase
 import logging
+import asyncio
 from agentic_ai.common import get_prd_grf_db_details
 
 logger = logging.getLogger(__name__)
@@ -14,11 +15,11 @@ class GraphDB:
         user = self._graph_db_dtl.get("user")
         password = self._graph_db_dtl.get("pwd")
         try:
-            self._graph_driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+            driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         except Exception as e:
             logger.error(e)
             raise e
-        return self._graph_driver
+        return driver
 
     async def connect(self):
         await self._driver.verify_connectivity()
@@ -30,6 +31,11 @@ class GraphDB:
         records, _, _ = await self._driver.execute_query(cypher, **params)
         return [r.data() for r in records]
 
+async def main():
+    connection = GraphDB()
+    await connection.connect()
+
 if __name__ == '__main__':
-    print("Inside GraphDB")
+    asyncio.run(main())
+
 
