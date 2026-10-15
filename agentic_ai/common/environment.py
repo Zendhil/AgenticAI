@@ -53,6 +53,13 @@ class Environment:
 
         return self._graph_db_dtl
 
+    def get_graph_driver(self):
+        uri=self._graph_db_dtl.get("PRD_GRF_DB_URI")
+        user = self._graph_db_dtl.get("PRD_GRF_DB_USER")
+        password = self._graph_db_dtl.get("PRD_GRF_DB_PWD")
+
+        AsyncGraphDatabase.driver(uri, auth=(user, password))
+
     def get_device(self)->str:
         print("get device")
         if self._device is None:
