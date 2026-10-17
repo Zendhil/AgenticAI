@@ -1,4 +1,4 @@
-from neo4j import AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase, GraphDatabase
 import logging
 import asyncio
 from agentic_ai.common import get_prd_grf_db_details
@@ -37,8 +37,14 @@ class GraphDB:
         records, _, _ = await self._driver.execute_query(cypher, **params)
         return [r.data() for r in records]
 
+    def get_graph_driver(self):
+        if self._driver is None:
+            self._driver = self._get_graph_driver()
+        return self._driver
 
 graph_db = GraphDB()
+get_graph_driver = graph_db.get_graph_driver
+
 graph_db_connect = graph_db.connect
 async def main():
     await graph_db_connect()
