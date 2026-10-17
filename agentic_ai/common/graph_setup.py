@@ -4,7 +4,13 @@ import asyncio
 from agentic_ai.common import get_prd_grf_db_details
 
 logger = logging.getLogger(__name__)
-
+cypher = """
+CREATE (l:Learning {
+    topic: $topic,
+    description: $description
+})
+RETURN l
+"""
 class GraphDB:
     def __init__(self):
         self._graph_db_dtl = get_prd_grf_db_details()
@@ -31,9 +37,17 @@ class GraphDB:
         records, _, _ = await self._driver.execute_query(cypher, **params)
         return [r.data() for r in records]
 
+
+graph_db = GraphDB()
+graph_db_connect = graph_db.connect
 async def main():
-    connection = GraphDB()
-    await connection.connect()
+    await graph_db_connect()
+    result = await graph_db.query(
+        cypher,
+        topic="Neo4j",
+        description="Learning graph databases"
+    )
+    print(result)
 
 if __name__ == '__main__':
     asyncio.run(main())
