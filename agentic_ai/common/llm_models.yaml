@@ -5,7 +5,7 @@
 # Default models for specific tasks - can be overridden per agent
 
 llm_model:
-  default: ollama/llama3.1:latest  # Default model for general tasks
+  default: llama3.1:latest  # Default model for general tasks
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────

@@ -202,7 +202,7 @@ class ProcessRAG:
         nodes = node_parser.get_nodes_from_documents(self._all_docs)  # get nodes from graph
         # Processes a batch of documents to extract Knowledge graphs and saves to file
         self._graph_store = SimplePropertyGraphStore()
-        extractor = SimpleLLMPathExtractor(llm=g_llm_model,
+        extractor = SimpleLLMPathExtractor(llm=g_llm_model  ,
                                            max_paths_per_chunk=10)  # 10 paths is default. Can be changed as per needs
         # Retry mechanism for llm timeouts
         max_retries = 5

@@ -62,4 +62,6 @@ get_llm_model = config.get_llm_model
 if __name__ == '__main__':
     print(get_config())
     print(get_embeddings_model())
-    print(get_llm_model())
+    # print(get_llm_model())
+    llm_model = get_llm_model()
+    # llm_model.complete(["waht model are you using?"])
