@@ -23,30 +23,35 @@ Usage:
 # Standard library imports
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Sequence, Optional
 from uuid import uuid4
 import asyncio
+
+from langsmith.run_helpers import is_async
 # from config import NEO4J, INDEX, embeddings
 
 # Third party imports
 from sentence_transformers import SentenceTransformer
-# from llama_index.core import Document
-# from llama_index.core.graph_stores.simple_labelled import SimplePropertyGraphStore
-# from llama_index.core.indices.property_graph.transformations import SimpleLLMPathExtractor
-# from llama_index.core.node_parser import SimpleNodeParser
-# from llama_index.core.ingestion.pipeline import run_transformations
+from llama_index.core import Document, SimpleDirectoryReader
+from llama_index.core.node_parser import SimpleNodeParser
+
+from llama_index.core.graph_stores.simple_labelled import SimplePropertyGraphStore
+from llama_index.core.indices.property_graph.transformations import SimpleLLMPathExtractor
+
+from llama_index.core.ingestion.pipeline import arun_transformations
 # from langchain_community.document_loaders import PyPDFLoader
 # from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_neo4j import Neo4jVector
 
 # App imports
-from agentic_ai.common import get_config, get_embeddings_model, get_device
+from agentic_ai.common import get_config, get_embeddings_model, get_device, get_llm_model
 from agentic_ai.common import GraphRepository, get_graph_driver
 
 g_device = get_device()
 g_embeddings_model = get_embeddings_model()
 g_embedding_model = SentenceTransformer(model_name_or_path=g_embeddings_model, device=g_device, similarity_fn_name='cosine')
 g_driver = get_graph_driver()
+g_llm_model = get_llm_model()
 
 logger = logging.getLogger(__name__)
 
@@ -173,11 +178,66 @@ async def build_rag_graph(document_text: str,
 
 
 class ProcessRAG:
-    def __init__(self, database: str = 'learning'):
+    def __init__(self, database: str = 'learning', dir_path: str = None):
         self.database = database
+        self._dir_path = dir_path # check for none, raise ValueError
+        self._all_docs: List[Document] = []
+        self._graph_store:Optional[SimplePropertyGraphStore] = None  # check if all these have to be in an object.
+
+    async def read_docs(self):
+        """
+        :return:
+        """
+
+        reader = SimpleDirectoryReader(input_dir=self._dir_path, recursive=True)  # is not async? # check if directory etc.
+
+        for docs in reader.iter_data():
+            self._all_docs.extend(docs)
+
+        return
+
+    async def extract_info(self):
+
+        node_parser = SimpleNodeParser.from_defaults(chunk_size=500, chunk_overlap=50)
+        nodes = node_parser.get_nodes_from_documents(self._all_docs)  # get nodes from graph
+        # Processes a batch of documents to extract Knowledge graphs and saves to file
+        self._graph_store = SimplePropertyGraphStore()
+        extractor = SimpleLLMPathExtractor(llm=g_llm_model,
+                                           max_paths_per_chunk=10)  # 10 paths is default. Can be changed as per needs
+        # Retry mechanism for llm timeouts
+        max_retries = 5
+        retries = 0
+        transformed_nodes = None
+        while retries < max_retries:
+            try:
+                transformed_nodes = await arun_transformations(nodes, [extractor], show_progress=True)
+                break  # Exit loop on success
+            except Exception as e:
+                retries += 1
+                logger.info(
+                    f"[ERROR]: llm timeout, retrying ({retries}/{max_retries})...")
+                await asyncio.sleep(5)  # Wait before retrying
+                if retries == max_retries:
+                    logger.error(
+                        f"[ERROR]: llm timeout, exiting...")
+                    raise
+
+        # Insert transformed nodes into graph store
+        for node in transformed_nodes:
+            kg_nodes = node.metadata.get("nodes", [])
+            kg_rels = node.metadata.get("relations", [])
+            self._graph_store.upsert_nodes(kg_nodes)
+            self._graph_store.upsert_relations(kg_rels)
+
+        triplets = self._graph_store.get_triplets()
+        for triplet in triplets:
+            print("triplets: ", triplet)
+
+
+        return
 
     async def process_and_store_document(self,
-                                   document_text: str,
+                                   document_text: Sequence,
                                    entities: List[Dict[str, Any]],
                                    relationships: List[Dict[str, Any]],
                                    doc_metadata: Dict[str, Any]):
@@ -206,22 +266,22 @@ class ProcessRAG:
 
         return graph_data
 
-    async def get_entity_context(self, entity_name: str) -> Dict[str, Any]:
-        """Get full context for an entity including relationships and source chunks."""
-        async with g_driver.session(database=self.database) as session:
-            repo = GraphRepository(session)
-            return await repo.get_entity_with_context(entity_name)
+async def get_entity_context(self, entity_name: str) -> Dict[str, Any]:
+    """Get full context for an entity including relationships and source chunks."""
+    async with g_driver.session(database=self.database) as session:
+        repo = GraphRepository(session)
+        return await repo.get_entity_with_context(entity_name)
 
-    async def get_chunks_for_entity(self, entity_name: str) -> List[Dict[str, Any]]:
-        """Get all text chunks that mention a specific entity."""
-        async with g_driver.session(database=self.database) as session:
-            repo = GraphRepository(session)
-            return await repo.get_chunks_for_entity(entity_name)
+async def get_chunks_for_entity(self, entity_name: str) -> List[Dict[str, Any]]:
+    """Get all text chunks that mention a specific entity."""
+    async with g_driver.session(database=self.database) as session:
+        repo = GraphRepository(session)
+        return await repo.get_chunks_for_entity(entity_name)
 
 
 if __name__ == '__main__':
     # Example usage
-    rag = ProcessRAG(database='learning')
+    rag = ProcessRAG(database='learning',dir_path='/Users/godzilla/Documents/Work/Learning/AgenticAI/agentic_ai/test')
 
     # Sample document
     document = """
@@ -259,17 +319,20 @@ if __name__ == '__main__':
 
     async def run_example():
         # Process and store the document
+        await rag.read_docs()
+        await rag.extract_info()
+        exit()
         graph_data = await rag.process_and_store_document(document, extracted_entities, extracted_relationships, metadata)
 
         # Query example: Get all context for "Steve Jobs"
-        context = await rag.get_entity_context("Steve Jobs")
+        context = await get_entity_context("Steve Jobs")
         print("\n=== Context for Steve Jobs ===")
         print(f"Label: {context.get('label')}")
         print(f"Relationships: {context.get('relationships')}")
         print(f"Mentioned in {len(context.get('chunks', []))} chunks")
 
         # Get chunks mentioning Steve Jobs
-        chunks = await rag.get_chunks_for_entity("Steve Jobs")
+        chunks = await get_chunks_for_entity("Steve Jobs")
         print("\n=== Chunks mentioning Steve Jobs ===")
         for chunk in chunks:
             print(f"Chunk {chunk['index']}: {chunk['text'][:100]}...")
