@@ -34,11 +34,13 @@ from langsmith.run_helpers import is_async
 from sentence_transformers import SentenceTransformer
 from llama_index.core import Document, SimpleDirectoryReader
 from llama_index.core.node_parser import SimpleNodeParser
+from llama_index.core.schema import MetadataMode
 
 from llama_index.core.graph_stores.simple_labelled import SimplePropertyGraphStore
 from llama_index.core.indices.property_graph.transformations import SimpleLLMPathExtractor
+from llama_index.core.graph_stores.types import ChunkNode, EntityNode, Relation
 
-from llama_index.core.ingestion.pipeline import arun_transformations
+from llama_index.core.ingestion.pipeline import arun_transformations, IngestionPipeline
 # from langchain_community.document_loaders import PyPDFLoader
 # from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_neo4j import Neo4jVector
@@ -46,6 +48,9 @@ from llama_index.core.ingestion.pipeline import arun_transformations
 # App imports
 from agentic_ai.common import get_config, get_embeddings_model, get_device, get_llm_model
 from agentic_ai.common import GraphRepository, get_graph_driver
+from agentic_ai.common.business_objects import (
+    EntityContext, Chunk
+)
 
 g_device = get_device()
 g_embeddings_model = get_embeddings_model()
@@ -183,6 +188,7 @@ class ProcessRAG:
         self._dir_path = dir_path # check for none, raise ValueError
         self._all_docs: List[Document] = []
         self._graph_store:Optional[SimplePropertyGraphStore] = None  # check if all these have to be in an object.
+        self._transformed_nodes: List = []
 
     async def read_docs(self):
         """
@@ -204,13 +210,20 @@ class ProcessRAG:
         self._graph_store = SimplePropertyGraphStore()
         extractor = SimpleLLMPathExtractor(llm=g_llm_model  ,
                                            max_paths_per_chunk=10)  # 10 paths is default. Can be changed as per needs
+
+        # Create Ingestion Pipeline for transformations
+        pipeline = IngestionPipeline(
+            transformations=[extractor]
+        )
+
         # Retry mechanism for llm timeouts
         max_retries = 5
         retries = 0
         transformed_nodes = None
         while retries < max_retries:
             try:
-                transformed_nodes = await arun_transformations(nodes, [extractor], show_progress=True)
+                # Use the ingestion pipeline to run transformations
+                transformed_nodes = await pipeline.arun(nodes=nodes, show_progress=True)
                 break  # Exit loop on success
             except Exception as e:
                 retries += 1
@@ -222,19 +235,153 @@ class ProcessRAG:
                         f"[ERROR]: llm timeout, exiting...")
                     raise
 
-        # Insert transformed nodes into graph store
+        # Add embeddings and insert transformed nodes into graph store
         for node in transformed_nodes:
+            # Get the text content from the node
+            node_text = node.get_content(metadata_mode=MetadataMode.EMBED)
+            # Generate embedding using SentenceTransformer
+            embedding = g_embedding_model.encode(node_text, convert_to_tensor=False)
+            # Store embedding in the node
+            node.embedding = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+
+            # Store the transformed node
+            self._transformed_nodes.append(node)
+
+            # Create ChunkNode to represent the text chunk
+            chunk_node = ChunkNode(
+                id_=node.id_,
+                text=node_text,
+                label="__Chunk__",
+                properties={
+                    "source": node.metadata.get("file_name", ""),
+                    "file_path": node.metadata.get("file_path", ""),
+                    "file_type": node.metadata.get("file_type", ""),
+                    "page": node.metadata.get("page_label", ""),
+                    "doc_id": node.ref_doc_id or "",
+                },
+                embedding=node.embedding
+            )
+            await self._graph_store.aupsert_nodes([chunk_node])
+
+            # Get extracted entities and relations
             kg_nodes = node.metadata.get("nodes", [])
             kg_rels = node.metadata.get("relations", [])
-            self._graph_store.upsert_nodes(kg_nodes)
-            self._graph_store.upsert_relations(kg_rels)
 
-        triplets = self._graph_store.get_triplets()
-        for triplet in triplets:
-            print("triplets: ", triplet)
+            # Link entities to the chunk they came from
+            for entity_node in kg_nodes:
+                entity_chunk_rel = Relation(
+                    label="EXTRACTED_FROM",
+                    source_id=entity_node.name,
+                    target_id=chunk_node.id_,
+                    properties={}
+                )
+                await self._graph_store.aupsert_relations([entity_chunk_rel])
 
+            # Insert entities and their relationships into graph store
+            await self._graph_store.aupsert_nodes(kg_nodes)
+            await self._graph_store.aupsert_relations(kg_rels)
 
         return
+
+    async def store_graph(self) -> Dict[str, Any]:
+        """
+        Extract data from SimplePropertyGraphStore and store in Neo4j.
+
+        This method:
+        1. Extracts all entities (EntityNode) from the graph store
+        2. Extracts all chunks (ChunkNode) from the graph store
+        3. Extracts all relations (entity-entity and entity-chunk)
+        4. Transforms data to Neo4j format
+        5. Calls GraphRepository.insert_graph() to persist to Neo4j
+
+        Returns:
+            Dict containing statistics about inserted data
+
+        Raises:
+            ValueError: If graph_store is not initialized (call extract_info first)
+        """
+        # Validation
+        if self._graph_store is None:
+            raise ValueError("Graph store not initialized. Call extract_info() first.")
+
+        # Step 1: Extract all nodes from graph store
+        all_nodes = self._graph_store.get()  # Returns List[LabelledNode]
+
+        # Step 2: Separate entities and chunks
+        chunks = []
+        entities = {}
+
+        for node in all_nodes:
+            if isinstance(node, ChunkNode):
+                # Transform ChunkNode to Neo4j chunk format
+                chunks.append({
+                    "id": node.id_ if node.id_ else str(uuid4()),
+                    "text": node.text,
+                    "metadata": {
+                        "source": node.properties.get("source", ""),
+                        "file_path": node.properties.get("file_path", ""),
+                        "file_type": node.properties.get("file_type", ""),
+                        "page": node.properties.get("page", ""),
+                        "doc_id": node.properties.get("doc_id", ""),
+                    }
+                })
+            elif isinstance(node, EntityNode):
+                # Transform EntityNode to Neo4j entity format
+                key = node.name.lower().replace(" ", "_")
+                entities[key] = {
+                    "label": node.label,
+                    "name": node.name,
+                    "properties": node.properties.copy() if node.properties else {}
+                }
+
+        # Step 3: Extract all relations
+        all_triplets = self._graph_store.get_triplets()  # List[Tuple[LabelledNode, Relation, LabelledNode]]
+
+        relations = {}
+        entity_chunk_links = []
+        rel_idx = 0
+
+        for source_node, relation, target_node in all_triplets:
+            # Check if this is an entity-chunk relationship
+            if isinstance(target_node, ChunkNode) and relation.label == "EXTRACTED_FROM":
+                entity_chunk_links.append({
+                    "entity_name": source_node.name,
+                    "chunk_id": target_node.id_,
+                    "relationship": "EXTRACTED_FROM"
+                })
+            elif isinstance(source_node, EntityNode) and isinstance(target_node, EntityNode):
+                # This is an entity-entity relationship
+                relations[f"rel_{rel_idx}"] = {
+                    "source_id": source_node.name,
+                    "target_id": target_node.name,
+                    "label": relation.label,
+                    "properties": relation.properties.copy() if relation.properties else {}
+                }
+                rel_idx += 1
+
+        # Step 4: Build graph data structure for Neo4j
+        graph_data = {
+            "chunks": chunks,
+            "nodes": entities,
+            "relations": relations,
+            "entity_chunk_links": entity_chunk_links
+        }
+
+        # Step 5: Insert into Neo4j
+        async with g_driver.session(database=self.database) as session:
+            repo = GraphRepository(session)
+            await repo.insert_graph(graph_data)
+
+        # Return statistics
+        stats = {
+            "chunks_inserted": len(chunks),
+            "entities_inserted": len(entities),
+            "relations_inserted": len(relations),
+            "entity_chunk_links_inserted": len(entity_chunk_links)
+        }
+
+        logger.info(f"Graph stored successfully: {stats}")
+        return stats
 
     async def process_and_store_document(self,
                                    document_text: Sequence,
@@ -266,17 +413,17 @@ class ProcessRAG:
 
         return graph_data
 
-async def get_entity_context(self, entity_name: str) -> Dict[str, Any]:
-    """Get full context for an entity including relationships and source chunks."""
-    async with g_driver.session(database=self.database) as session:
-        repo = GraphRepository(session)
-        return await repo.get_entity_with_context(entity_name)
+    async def get_entity_context(self, entity_name: str) -> Optional[EntityContext]:
+        """Get full context for an entity including relationships and source chunks."""
+        async with g_driver.session(database=self.database) as session:
+            repo = GraphRepository(session)
+            return await repo.get_entity_with_context(entity_name)
 
-async def get_chunks_for_entity(self, entity_name: str) -> List[Dict[str, Any]]:
-    """Get all text chunks that mention a specific entity."""
-    async with g_driver.session(database=self.database) as session:
-        repo = GraphRepository(session)
-        return await repo.get_chunks_for_entity(entity_name)
+    async def get_chunks_for_entity(self, entity_name: str) -> List[Chunk]:
+        """Get all text chunks that mention a specific entity."""
+        async with g_driver.session(database=self.database) as session:
+            repo = GraphRepository(session)
+            return await repo.get_chunks_for_entity(entity_name)
 
 
 if __name__ == '__main__':
@@ -318,23 +465,48 @@ if __name__ == '__main__':
     }
 
     async def run_example():
-        # Process and store the document
+        # Process documents and extract knowledge graph
         await rag.read_docs()
         await rag.extract_info()
-        exit()
-        graph_data = await rag.process_and_store_document(document, extracted_entities, extracted_relationships, metadata)
 
-        # Query example: Get all context for "Steve Jobs"
-        context = await get_entity_context("Steve Jobs")
-        print("\n=== Context for Steve Jobs ===")
-        print(f"Label: {context.get('label')}")
-        print(f"Relationships: {context.get('relationships')}")
-        print(f"Mentioned in {len(context.get('chunks', []))} chunks")
+        # Store in Neo4j
+        stats = await rag.store_graph()
+        print(f"\n=== Graph Storage Statistics ===")
+        print(f"Chunks inserted: {stats['chunks_inserted']}")
+        print(f"Entities inserted: {stats['entities_inserted']}")
+        print(f"Relations inserted: {stats['relations_inserted']}")
+        print(f"Entity-chunk links: {stats['entity_chunk_links_inserted']}")
 
-        # Get chunks mentioning Steve Jobs
-        chunks = await get_chunks_for_entity("Steve Jobs")
-        print("\n=== Chunks mentioning Steve Jobs ===")
+        # Query example: Get structured entity context
+        # Replace "Apple Inc." with an actual entity from your documents
+        entity_name = "Apple Inc."  # Example - adjust based on your data
+        context = await rag.get_entity_context(entity_name)
+
+        if context:
+            print(f"\n=== Context for {entity_name} ===")
+            print(f"Entity: {context.entity.name} ({context.entity.label})")
+            print(f"Relationships: {len(context.relationships)}")
+            for rel in context.relationships:
+                print(f"  - {rel.type}: {rel.source} → {rel.target}")
+            print(f"Mentioned in {len(context.chunks)} chunks")
+
+            # Serialize to JSON
+            print("\n=== JSON Output ===")
+            import json
+            print(json.dumps(context.model_dump(), indent=2))
+        else:
+            print(f"Entity '{entity_name}' not found")
+
+        # Get chunks for entity
+        chunks = await rag.get_chunks_for_entity(entity_name)
+        print(f"\n=== Chunks mentioning {entity_name} ===")
         for chunk in chunks:
-            print(f"Chunk {chunk['index']}: {chunk['text'][:100]}...")
+            print(f"Chunk {chunk.metadata.index}: {chunk.text[:100]}...")
+
+        # Show JSON serialization options
+        if chunks:
+            print("\n=== Serialization Examples ===")
+            print("As dict:", chunks[0].model_dump())
+            print("As JSON string:", chunks[0].model_dump_json())
 
     asyncio.run(run_example())
