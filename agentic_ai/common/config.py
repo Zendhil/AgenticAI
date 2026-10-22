@@ -7,6 +7,7 @@ from typing import Any
 
 # Third Party libraries
 from llama_index.llms.ollama import Ollama
+from langchain_ollama import OllamaLLM
 
 logger = logging.getLogger(__name__)
 base_dir=Path(__file__).parent
@@ -51,7 +52,7 @@ class Config:
         if not llm_model_str:
             raise KeyError(f"Embedding function model not found")
 
-        return Ollama(model=llm_model_str, request_timeout=300)
+        return OllamaLLM(model=llm_model_str)
 
 
 config = Config()  #singleton class
