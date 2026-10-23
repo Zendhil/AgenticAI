@@ -8,6 +8,8 @@ from typing import Any
 # Third Party libraries
 from llama_index.llms.ollama import Ollama
 from langchain_ollama import OllamaLLM
+# Correct
+from langchain_ollama import ChatOllama
 
 logger = logging.getLogger(__name__)
 base_dir=Path(__file__).parent
@@ -52,7 +54,7 @@ class Config:
         if not llm_model_str:
             raise KeyError(f"Embedding function model not found")
 
-        return OllamaLLM(model=llm_model_str)
+        return ChatOllama(model=llm_model_str)
 
 
 config = Config()  #singleton class
