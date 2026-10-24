@@ -39,13 +39,13 @@ class Environment:
         print(f"Running on: {self._device}")  # Log the device used
         return self._device
 
-    def get_prd_grf_db_details(self):
+    def get_prd_grf_db_details(self, database='DEFAULT_DATABASE'):
         # Use get() to retrieve the DB_URL, defaulting to None if not set
         self._graph_db_dtl = {
             "uri": os.getenv("PRD_GRF_DB_URI"),
             "user": os.getenv("PRD_GRF_DB_USER"),
             "pwd": os.getenv("PRD_GRF_DB_PWD"),
-            "db":os.getenv("DEFAULT_DATABASE", "neo4j")  # default DB
+            "db":os.getenv(database, "neo4j")  # default DB
         }
 
         for k,v in self._graph_db_dtl.items():
@@ -62,9 +62,15 @@ class Environment:
             self._device = self._detect_device()
         return self._device
 
+    def get_redis_url(self) -> str:
+        """Get Redis URL from environment variables."""
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        return redis_url
+
 environment = Environment()
 get_device=environment.get_device
 get_prd_grf_db_details = environment.get_prd_grf_db_details
+get_redis_url = environment.get_redis_url
 
 if __name__ == '__main__':
 

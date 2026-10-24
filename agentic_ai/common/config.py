@@ -10,6 +10,8 @@ from llama_index.llms.ollama import Ollama
 from langchain_ollama import OllamaLLM
 # Correct
 from langchain_ollama import ChatOllama
+from sentence_transformers import SentenceTransformer
+from agentic_ai.common.environment import get_device
 
 logger = logging.getLogger(__name__)
 base_dir=Path(__file__).parent
@@ -61,6 +63,46 @@ config = Config()  #singleton class
 get_config = config._get_config
 get_embeddings_model = config.get_embeddings_model
 get_llm_model = config.get_llm_model
+
+
+class EmbeddingService:
+    """Singleton service for text embeddings using SentenceTransformer."""
+
+    _instance = None
+    _model = None
+    _dim = None
+
+    @classmethod
+    def get_instance(cls):
+        """Get or create the singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        """Initialize the embedding model (called only once)."""
+        if EmbeddingService._model is None:
+            model_name = get_embeddings_model()
+            device = get_device()
+            logger.info(f"Loading embedding model: {model_name} on device: {device}")
+            EmbeddingService._model = SentenceTransformer(model_name, device=device)
+            EmbeddingService._dim = EmbeddingService._model.get_sentence_embedding_dimension()
+            logger.info(f"Embedding dimension: {EmbeddingService._dim}")
+
+    def encode(self, text: str) -> list[float]:
+        """Encode text to embedding vector."""
+        if EmbeddingService._model is None:
+            raise RuntimeError("Embedding model not initialized")
+        embedding = EmbeddingService._model.encode(text)
+        return embedding.tolist()
+
+    @property
+    def dimension(self) -> int:
+        """Get embedding dimension."""
+        if EmbeddingService._dim is None:
+            raise RuntimeError("Embedding model not initialized")
+        return EmbeddingService._dim
+
 
 if __name__ == '__main__':
     print(get_config())

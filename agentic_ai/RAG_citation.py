@@ -44,7 +44,7 @@ from llama_index.core.ingestion.pipeline import arun_transformations, IngestionP
 # from langchain_community.document_loaders import PyPDFLoader
 # from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_neo4j import Neo4jVector
-
+import redis.asyncio as g_driver
 # App imports
 from agentic_ai.common import get_config, get_embeddings_model, get_device, get_llm_model
 from agentic_ai.common import GraphRepository, get_graph_driver
