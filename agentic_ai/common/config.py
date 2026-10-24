@@ -103,6 +103,12 @@ class EmbeddingService:
             raise RuntimeError("Embedding model not initialized")
         return EmbeddingService._dim
 
+    @classmethod
+    def get_embedding_model(cls)->Any:
+        if cls._model is None:
+            raise RuntimeError("Embedding model not initialized")
+        return cls._model
+
 
 if __name__ == '__main__':
     print(get_config())
