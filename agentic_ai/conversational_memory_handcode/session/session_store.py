@@ -3,23 +3,33 @@ from abc import ABC,abstractmethod
 import json
 import asyncio
 from abc import ABC, abstractmethod
-
+from dataclasses import dataclass, asdict
 #Third party library
 import redis.asyncio as redis
 
+@dataclass
+class SessionKey:
+    session_id: str
+    user_id: str
+    agent_id: str
 
+@dataclass
+class Session:
+    key_: SessionKey
+    message: str
 
 
 # 1. Define the contract
 class AbstractDatabaseClient(ABC):
 
     @abstractmethod
-    async def save_session(self, session_id: str, data: dict) -> None:
+    async def save_session(self, session_info:Session) -> None:
         pass
 
     @abstractmethod
-    async def retrieve_session(self, session_id: str) -> dict | None:
+    async def retrieve_session(self, session_info:Session) -> dict | None:
         pass
+
 
 
 # 2. Implement Redis
@@ -33,8 +43,11 @@ class RedisClient(AbstractDatabaseClient):
             decode_responses=True
         )
 
-    async def save_session(self, session_id: str, data: dict) -> None:
-        await self._client.set(session_id, json.dumps(data))
+    async def to_dict(self, session_info: Session) -> dict:
+        return asdict()
+
+    async def save_session(self,  session_info: Session) -> None:
+        await self._client.set(json.dumps(session_info), session_info.session_id)
 
     async def retrieve_session(self, session_id: str) -> dict | None:
         data = await self._client.get(session_id)
