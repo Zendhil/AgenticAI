@@ -7,31 +7,18 @@ from dataclasses import dataclass, asdict
 #Third party library
 import redis.asyncio as redis
 
-@dataclass
-class SessionKey:
-    session_id: str
-    user_id: str
-    agent_id: str
 
-    def to_redis_key(self) -> str:
-        return f"session:{self.user_id}:{self.session_id}:{self.agent_id}"
-@dataclass
-class Session:
-    key_: SessionKey
-    message: str
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 # 1. Define the contract
 class AbstractDatabaseClient(ABC):
 
     @abstractmethod
-    async def save_session(self, session_info:Session) -> None:
+    async def save_session(self, key:str, value:str) -> None:
         pass
 
     @abstractmethod
-    async def retrieve_session(self, session_info:Session) -> dict | None:
+    async def retrieve_session(self, key:str, value:str) -> dict | None:
         pass
 
 
@@ -47,14 +34,14 @@ class RedisClient(AbstractDatabaseClient):
             decode_responses=True
         )
 
-    async def save_session(self,  session_info: Session) -> None:
-        redis_key = session_info.key_.to_redis_key()
-        session_data = session_info.to_dict()
+    async def save_session(self,  key_:str, value:str) -> None:
 
-        await self._client.set(redis_key, session_data.get("message"))
+        await self._client.set(key_, value)
 
-    async def retrieve_session(self, session_id: str) -> dict | None:
-        data = await self._client.get(session_id)
+    async def retrieve_session(self, key_: str) -> dict | None:
+        if key_ is None:
+            raise ValueError("The value provided for Session key is None")
+        data = await self._client.get(key_)
         return json.loads(data) if data is not None else None
 
     async def connect(self) -> bool:
