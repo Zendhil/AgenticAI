@@ -31,7 +31,7 @@ class SessionKey:
             str: Formatted Redis key in the pattern 'session:user_id:session_id:agent_id'
         """
         logger.info("Inside class SessionKey, function to_redis_key")
-        return f"session:{self.user_id}:{self.session_id}:{self.agent_id}"
+        return f"{self.user_id}:{self.session_id}:{self.agent_id}"
 
 @dataclass
 class Message:
@@ -216,7 +216,7 @@ class MemoryManager:
             # Retrieve session and get messages list
             session = await self._retrieve()
             messages = session.values_ if hasattr(session, 'values_') else []
-
+            logger.info(f"Found {len(messages)} messages")
             if not messages:
                 logger.warning("No messages found in session")
                 return []
@@ -228,6 +228,7 @@ class MemoryManager:
             context_messages = []
             for i, msg_vector in enumerate(msg_vectors):
                 similarity_score = cosine_similarity(query_embed, msg_vector)[0][0]
+                print(f"similarity score of {messages[i]} {i}: message")
                 if similarity_score >= threshold:
                     context_messages.append(messages[i])
                     logger.debug(f"Message {i} similarity: {similarity_score:.3f}")

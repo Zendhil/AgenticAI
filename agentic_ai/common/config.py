@@ -17,10 +17,16 @@ logger = logging.getLogger(__name__)
 base_dir=Path(__file__).parent
 MODEL_CONFIG_FILE = base_dir.joinpath("llm_models.yaml")
 
+
+
+
 class Config:
     def __init__(self):
         self._config:dict=self._load_models_config()
-
+        logging.basicConfig(
+            level=self._config.get("logging_settings").get("log_level"),
+            format="%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+        )
     def _load_models_config(self)->dict:
 
         try:

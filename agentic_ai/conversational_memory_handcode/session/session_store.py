@@ -106,13 +106,14 @@ class RedisClient(AbstractDatabaseClient):
     async def retrieve_session(self, key_: str) -> list[dict] | None:
         """Retrieves messages from a Redis List."""
         logger.info("Inside RedisClient.retrieve_session")
+        print(f"Redis session key: {key_}")
 
         try:
             if key_ is None:
                 raise ValueError("The Session key is None")
 
-            data = await self._client.lrange(key_, 0, -1)
-
+            data = await self._client.lrange(key_, 0,-1)
+            print("length of message returned:", len(data))
             if not data:
                 return None
 
@@ -210,4 +211,6 @@ cache_client = SessionClientFactory.create("redis")
 
 
 if __name__=="__main__":
-    print(asyncio.run(cache_client.close()))
+    # print(asyncio.run(cache_client.close()))
+    messages= asyncio.run(cache_client.retrieve_session(key_="test_user_relevance:test_session_relevance:test_agent_relevance"))
+    print(messages)
