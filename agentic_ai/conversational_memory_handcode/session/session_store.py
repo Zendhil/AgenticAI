@@ -13,10 +13,14 @@ class SessionKey:
     user_id: str
     agent_id: str
 
+    def to_redis_key(self) -> str:
+        return f"session:{self.user_id}:{self.session_id}:{self.agent_id}"
 @dataclass
 class Session:
     key_: SessionKey
     message: str
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 # 1. Define the contract
@@ -43,11 +47,11 @@ class RedisClient(AbstractDatabaseClient):
             decode_responses=True
         )
 
-    async def to_dict(self, session_info: Session) -> dict:
-        return asdict()
-
     async def save_session(self,  session_info: Session) -> None:
-        await self._client.set(json.dumps(session_info), session_info.session_id)
+        redis_key = session_info.key_.to_redis_key()
+        session_data = session_info.to_dict()
+
+        await self._client.set(redis_key, session_data.get("message"))
 
     async def retrieve_session(self, session_id: str) -> dict | None:
         data = await self._client.get(session_id)
