@@ -43,6 +43,9 @@ class RedisClient(AbstractDatabaseClient):
     async def connect(self) -> bool:
         return await self._client.ping()
 
+    async def close(self) -> bool:
+        return await self._client.aclose()
+
 
 # 3. Create the factory
 class SessionClientFactory:
@@ -55,9 +58,9 @@ class SessionClientFactory:
             case _:
                 raise ValueError(f"Unsupported database client: {client}")
 
+redis_client = SessionClientFactory.create("redis")
+
 
 
 if __name__=="__main__":
-    client_= SessionClientFactory.create(client="redis")
-
-    print(asyncio.run(client_.connect()))
+    print(asyncio.run(redis_client.close()))

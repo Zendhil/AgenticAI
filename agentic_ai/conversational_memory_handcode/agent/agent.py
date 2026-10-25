@@ -19,12 +19,12 @@ class ChatAgent:
     def __init__(self,cls,agent_id:str, user_id:str, session_store, llm:Any):
         self._agent_id= agent_id or uuid.uuid4()
         self._user_id = user_id
-        self._session_store = session_store
+        self._session_store = session_store # this needs to be done.
         self._llm = llm or cls.default_llm
-        self._agent = create_agent( model=self._llm,
-                                    system_prompt=PROMPT
-                                    )
 
+    async def chat(self,user_message):
+
+    
 
 
 if __name__ == "__main__":
