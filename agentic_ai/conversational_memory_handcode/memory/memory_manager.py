@@ -12,59 +12,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 #app library imports
 from agentic_ai.conversational_memory_handcode.session import cache_client
+from agentic_ai.conversational_memory_handcode.memory.session_manager import Message, SessionManager, Session, SessionKey
 from agentic_ai.common import EmbeddingService
 
+
 logger = logging.getLogger(__name__)
-
-@dataclass
-class SessionKey:
-    """Represents a unique session identifier composed of user, session, and agent IDs."""
-    session_id: str
-    user_id: str
-    agent_id: str
-
-    def to_redis_key(self) -> str:
-        """
-        Converts the session key to a Redis key format.
-
-        Returns:
-            str: Formatted Redis key in the pattern 'session:user_id:session_id:agent_id'
-        """
-        logger.info("Inside class SessionKey, function to_redis_key")
-        return f"{self.user_id}:{self.session_id}:{self.agent_id}"
-
-@dataclass
-class Message:
-    """Represents a conversation message with role, content, and timestamp."""
-    role:str
-    content: str
-    timestamp: datetime
-
-    def to_redis_value(self) -> str:
-        """
-        Serializes the message to a JSON string for Redis storage.
-
-        Returns:
-            str: JSON string containing role, content, and ISO-formatted timestamp
-        """
-        logger.info("Inside class Message, function to_redis_value")
-        return json.dumps({
-            "role": self.role,
-            "content": self.content,
-            "timestamp": self.timestamp.isoformat()
-        })
-
-@dataclass
-class Session:
-    """Represents a conversation session containing a key and list of messages."""
-    key_: SessionKey
-    values_: list[Message] =field(default_factory=list)
-    # def to_dict(self) -> dict:
-    #     return asdict(self)
-
-# @dataclass
-# class ShortTermMemory:
-
 
 
 @dataclass
@@ -79,60 +31,6 @@ class UserMemory:
     short_term_memory:list[Message]
     #To be defined: Long term memory
 
-class SessionManager:
-    """
-    Memory-enabled session manager.
-
-    Handles saving and retrieving session information from Redis cache.
-    """
-    def __init__(self,session_key:SessionKey):
-        """
-        Initializes the SessionManager with a session key.
-
-        Args:
-            session_key: SessionKey object containing user, session, and agent identifiers
-        """
-        logger.info("Inside class SessionManager, function __init__")
-        self._session_key = session_key
-
-    async def save_session(self, session_info:Session):
-        """
-        Saves session information to Redis cache.
-
-        Args:
-            session_info: Session object containing key and message values
-
-        Raises:
-            Exception: If Redis save operation fails
-        """
-        logger.info("Inside class SessionManager, function _save_session")
-        try:
-            key_=session_info.key_.to_redis_key()
-            values_list =[value_.to_redis_value() for value_ in session_info.values_]
-            await cache_client.save_session(key_, values_list)
-        except Exception as e:
-            logger.error(f"Error saving session to Redis: {e}")
-            raise
-
-    async def retrieve_info(self)->list[Message]:
-        """
-        Retrieves session information from Redis cache.
-
-        Returns:
-            Session: Retrieved session object
-
-        Raises:
-            Exception: If Redis retrieve operation fails
-        """
-        logger.info("Inside class SessionManager, function _retrieve_info")
-        try:
-            key_=self._session_key.to_redis_key()
-            print("*************Key for the retrieval***************", key_)
-            messages = await cache_client.retrieve_session(key_=key_)
-            return messages
-        except Exception as e:
-            logger.error(f"Error retrieving session from Redis: {e}")
-            raise
 
 class MemoryManager:
     """
@@ -214,8 +112,8 @@ class MemoryManager:
             query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
 
             # Retrieve session and get messages list
-            session = await self._retrieve()
-            messages = session.values_ if hasattr(session, 'values_') else []
+            messages = await self._retrieve()
+
             logger.info(f"Found {len(messages)} messages")
             if not messages:
                 logger.warning("No messages found in session")
@@ -228,7 +126,7 @@ class MemoryManager:
             context_messages = []
             for i, msg_vector in enumerate(msg_vectors):
                 similarity_score = cosine_similarity(query_embed, msg_vector)[0][0]
-                print(f"similarity score of {messages[i]} {i}: message")
+                logger.info(f"similarity score of {messages[i]} {i}: {similarity_score}")
                 if similarity_score >= threshold:
                     context_messages.append(messages[i])
                     logger.debug(f"Message {i} similarity: {similarity_score:.3f}")
@@ -278,9 +176,9 @@ async def test_redis_operations():
     try:
         # Step 1: Create a session key
         session_key = SessionKey(
-            session_id="test_session_456",
-            user_id="test_user_456",
-            agent_id="test_agent_789"
+            session_id="test_session_relevance",
+            user_id="test_user_relevance",
+            agent_id="test_agent_relevance"
         )
         logger.info(f"Created session key: {session_key.to_redis_key()}")
 
@@ -317,6 +215,8 @@ async def test_redis_operations():
         # Step 6: Verify data
         if retrieved_session:
             logger.info("Test PASSED: Data was successfully stored and retrieved from Redis")
+            mem_man = MemoryManager(session_manager)
+            await mem_man.fetch_relevant_info(user_query="what is Python")
         else:
             logger.warning("Test WARNING: No data retrieved from Redis")
 
@@ -347,7 +247,7 @@ if __name__ == "__main__":
 
     # Run the async test
     asyncio.run(test_redis_operations())
-
+    # asyncio.run(MemoryManager.fetch_relevant_info(user_query="What is python?"))
     print("=" * 60)
     print("Test completed. Check logs above for results.")
     print("=" * 60)
