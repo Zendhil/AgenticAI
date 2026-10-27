@@ -115,6 +115,8 @@ class EmbeddingService:
             raise RuntimeError("Embedding model not initialized")
         return cls._model
 
+es = EmbeddingService()
+get_embedding_model = es.get_embedding_model
 
 if __name__ == '__main__':
     print(get_config())
