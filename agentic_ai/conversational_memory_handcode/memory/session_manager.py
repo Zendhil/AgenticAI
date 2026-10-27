@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 import json
 from dataclasses import dataclass, field, fields
+from uuid import uuid4
 #Third party library imports
 
 #App library imports
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionKey:
     """Represents a unique session identifier composed of user, session, and agent IDs."""
-    session_id: str
+    session_id: str | None
     user_id: str
     agent_id: str
 
@@ -84,6 +85,14 @@ class SessionManager:
         """
         logger.info("Inside class SessionManager, function __init__")
         self._session_key = session_key
+        if self._session_key.session_id is None:
+            self._session_key.session_id = str(uuid4())
+        if self._session_key.agent_id is None:
+            logger.error("In Session Manager:init:Agent ID not provided")
+            raise ValueError("Agent ID not provided")
+        if self._session_key.user_id is None:
+            logger.error("In Session Manager:init:User ID not provided")
+            raise ValueError("User ID not provided")
 
     async def save_session(self, session_info:Session):
         """

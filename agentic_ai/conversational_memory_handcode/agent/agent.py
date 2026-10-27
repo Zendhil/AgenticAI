@@ -6,11 +6,12 @@ from typing import Any
 import asyncio
 #Thrid party imports
 from langchain.agents import create_agent
-
+from langchain.messages import AIMessage, HumanMessage
 # App imports
 from agentic_ai.common import get_llm_model, get_embedding_model
-from agentic_ai.conversational_memory_handcode.memory import MemoryManager
+from agentic_ai.conversational_memory_handcode.memory import MemoryManager, SessionManager, SessionKey, Session
 from agentic_ai.conversational_memory_handcode.agent.prompt import PROMPT
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,20 +27,43 @@ class ChatAgent:
         self._llm = llm or get_llm_model()
         self._memory_manager = memory_manager or MemoryManager() # check this... if its empty then initialization should happen
 
-    async def chat(self):
+    async def chat(self, commit_threshold = 6):
 
         messages = []
-        user_message = ""
         response = []
-            while (1):
-                user_message = input("User:")
-                messages.append(user_message)
-                if user_message != "exit":
-                    try:
-                        response = await self._llm.ainvoke(messages)
-                    except Exception as e:
-                        raise e
-                print(response)
+        input_id = input("Enter your user_id:")
+        # retrieve context for User_id
+        # build SessionManager
+        session_key = SessionKey(session_id=None,user_id=input_id, agent_id="1234")
+        session_manager = SessionManager(session_key=session_key)
+        memory_manager = MemoryManager(session_manager=session_manager)
+        # check if context exists. Retrieve
+        # check in Long term memory
+        # try:
+        #     messages = await session_manager.retrieve_info()
+        # except Exception as e:
+        #     logger.error(f"In ChatAgent: chat: Error {e}")
+        #
+
+        while True:
+            input_message = input("User:")
+            messages.append(HumanMessage(content = input_message))
+            if input_message != "exit":
+                try:
+                    response = await self._llm.ainvoke(messages)
+                    print(f"AI Response:{response.content}")
+                    messages.append(AIMessage(content=response.content))
+                    if len(messages) == commit_threshold:
+                        #call session store to commit.
+                        # continue from here... build session messages. messages has to unwrap human and AI.. so it needs a method for wrapping and unwrapping.
+                        # check messages dataclass.. how session, sessionkey, messages and Human and AI messaegs are orgainsed. thenc commit.
+                        # then write the retrieve from long DB.
+                        await session_manager.save_session(session_key)
+                except Exception as e:
+                    raise e
+            else:
+                break
+        print("Messages:",messages)
 
 
 
