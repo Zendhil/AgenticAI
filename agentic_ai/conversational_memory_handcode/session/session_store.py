@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # 1. Define the contract
-class AbstractDatabaseClient(ABC):
+class AbstractTempStorageClient(ABC):
     """
     Abstract base class defining the contract for database client implementations.
 
@@ -55,7 +55,7 @@ class AbstractDatabaseClient(ABC):
 
 
 # 2. Implement Redis
-class RedisClient(AbstractDatabaseClient):
+class RedisClient(AbstractTempStorageClient):
     """
     Redis implementation of the AbstractDatabaseClient.
 
@@ -177,7 +177,7 @@ class SessionClientFactory:
     """
 
     @staticmethod
-    def create(client="redis", **kwargs) -> AbstractDatabaseClient:
+    def create(client="redis", **kwargs) -> AbstractTempStorageClient:
         """
         Creates and returns a database client instance.
 
