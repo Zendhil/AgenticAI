@@ -9,7 +9,7 @@ from agentic_ai.conversational_Agent.agent.agent import ConversationalAgent, Mem
 from agentic_ai.conversational_Agent.memory.base import BaseMemory
 from agentic_ai.conversational_Agent.memory.redis_memory import RedisMemory
 from agentic_ai.conversational_Agent.memory.neo4j_memory import Neo4jMemory
-from agentic_ai.conversational_Agent.session.session import Session, SessionStore
+from agentic_ai.conversational_Agent.session.session import Session, SessionStore, Message
 
 __all__ = [
     "ConversationalAgent",

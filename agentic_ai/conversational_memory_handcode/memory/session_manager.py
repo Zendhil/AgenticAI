@@ -26,7 +26,7 @@ class SessionKey:
             str: Formatted Redis key in the pattern 'session:user_id:session_id:agent_id'
         """
         logger.info("Inside class SessionKey, function to_redis_key")
-        return f"{self.user_id}:{self.session_id}:{self.agent_id}"
+        return f"{self.session_id}:{self.agent_id}:{self.user_id}"
 
 @dataclass
 class Message:
@@ -61,6 +61,7 @@ class Message:
             )
 
         return cls(**{k: v for k, v in data.items() if k in valid_fields})
+
 
 @dataclass
 class Session:
