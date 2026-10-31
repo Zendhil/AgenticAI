@@ -96,3 +96,18 @@ class RepositoryGraph:
 
 if __name__ == '__main__':
     print("Inside repository graph.py")
+    import asyncio
+    rep_graph = RepositoryGraph(driver=None, embedding_model=None)
+    print(asyncio.run(rep_graph.store_conversations([
+        {
+            "message_id": "test_msg_iso_b",
+            "user_id": "test_user_a",
+            "agent_id": "test_agent_a",
+            "session_id": "test_session_iso_a",
+            "role": "human",
+            "content": "User B is related to User A",
+            "timestamp": "2026-10-31T10:00:00",
+            "embedding": None
+        }
+    ])))
+
