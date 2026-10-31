@@ -105,8 +105,8 @@ class MemoryManager:
             # find embeddings >0.65 cosine distance.
             # return that info as context
 
-            # Initialize embedding service once
-            embedding_service = EmbeddingService()
+            # Initialize embedding service using singleton pattern
+            embedding_service = EmbeddingService.get_instance()
 
             # Get query embedding and reshape to 2D array for cosine_similarity
             query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)

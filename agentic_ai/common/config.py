@@ -95,22 +95,34 @@ class EmbeddingService:
             EmbeddingService._dim = EmbeddingService._model.get_sentence_embedding_dimension()
             logger.info(f"Embedding dimension: {EmbeddingService._dim}")
 
-    def encode(self, text: str) -> list[float]:
-        """Encode text to embedding vector."""
+    def encode(self, text: str | list[str]) -> list[float] | list[list[float]]:
+        """
+        Encode text(s) to embedding vector(s). Synchronous - CPU bound operation.
+
+        Args:
+            text: Single string or list of strings to encode
+
+        Returns:
+            Single embedding vector or list of embedding vectors
+        """
         if EmbeddingService._model is None:
             raise RuntimeError("Embedding model not initialized")
         embedding = EmbeddingService._model.encode(text)
-        return embedding.tolist()
+        # Handle both single string and list of strings
+        if isinstance(text, str):
+            return embedding.tolist()
+        return [e.tolist() for e in embedding]
 
     @property
     def dimension(self) -> int:
-        """Get embedding dimension."""
+        """Get embedding dimension. Synchronous property."""
         if EmbeddingService._dim is None:
             raise RuntimeError("Embedding model not initialized")
         return EmbeddingService._dim
 
     @classmethod
-    def get_embedding_model(cls)->Any:
+    def get_embedding_model(cls) -> Any:
+        """Get the underlying embedding model instance. Synchronous method."""
         if cls._model is None:
             raise RuntimeError("Embedding model not initialized")
         return cls._model

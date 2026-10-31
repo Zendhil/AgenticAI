@@ -9,6 +9,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "pydantic>=2.14.0"
@@ -32,6 +33,12 @@ select = ["E", "F", "I"]
 ignore = []
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["agentic_ai/test"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests with mocked dependencies (fast)",
+    "integration: Integration tests requiring Neo4j (slow)",
+    "edge_case: Edge case and stress tests",
+]
