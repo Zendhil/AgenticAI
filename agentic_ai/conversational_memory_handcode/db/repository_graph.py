@@ -16,7 +16,7 @@ class RepositoryGraph:
         self._label = "Conversation"
         self._index_name = "conversation_embedding_index"
 
-    async def store_conversations(
+    async def _store_conversations(
             self,
             conversations: List[Dict[str, Any]]
     ) -> None:
