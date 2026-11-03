@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 class RepositoryGraph:
 
-    def __init__(self, driver, embedding_model):
+    def __init__(self, driver=None, embedding_model=None, label=None):
         self._driver = driver or get_graph_driver()
         self._embedding_model = embedding_model or get_embedding_model()
-        self._label = "Conversation"
+        self._label = label or "Conversation"
         self._index_name = "conversation_embedding_index"
 
     async def _store_conversations(

@@ -21,7 +21,7 @@ class DBStore(ABC):
         pass
 
 class DbStoreFactory:
-    def create(self, storage:str="neo4j"):
+    async def create(self, storage:str="neo4j"):
         if storage == "neo4j":
             return Neo4j(driver=None, embedding_model=None)
 
@@ -44,6 +44,20 @@ class Neo4j(DBStore):
 
 
 if __name__ == "__main__":
+    import asyncio
     print("Inside db")
     db = DbStoreFactory()
-    db.create("neo4j")
+    graph_db = asyncio.run(db.create("neo4j"))
+    conversations = [
+        {
+            "message_id": "msg_empty",
+            "user_id": "user_1",
+            "agent_id": "agent_1",
+            "session_id": "session_1",
+            "role": "human",
+            "content": "testing db_store",  # Empty content
+            "timestamp": "2026-10-31T10:00:00"
+        }
+    ]
+    asyncio.run(graph_db.store_conversations(conversations))
+
