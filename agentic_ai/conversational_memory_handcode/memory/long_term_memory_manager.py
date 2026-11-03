@@ -23,7 +23,8 @@ class LongTermMemoryManager:
         else:
             raise ValueError(f"Unsupported DB store: {db_store}")
 
-        return cls(db_obj=db_obj)
+        # return cls(db_obj=db_obj)
+        return db_obj
 
 
     async def retrieve_info(self, user_id = None, mode="query")->list[Message]:
