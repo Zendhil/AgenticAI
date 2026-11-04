@@ -69,10 +69,11 @@ class LongTermMemoryManager:
                     Conversations: Retrieved user Conversations
 
         """
-        pass
-        # logger.info("Inside class LongTermMemoryManager, function _fetch_all")
-        # for key in kwargs:
-        #     if key == "user_id":
+
+        logger.info("Inside class LongTermMemoryManager, function _fetch_all")
+        if kwargs.get("User_id"):
+
+
 
 
     async def _summarise(self, messages)->list[Message]:

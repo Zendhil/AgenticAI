@@ -33,7 +33,7 @@ class Neo4j(DBStore):
         self._graph_connector = RepositoryGraph(self._driver, embedding_model)
 
     async def store_conversations(self, messages):
-        await self._graph_connector._store_conversations(messages)
+        await self._graph_connector.store_conversations(messages)
 
     async def retrieve(self):
         pass

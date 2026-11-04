@@ -16,7 +16,7 @@ class RepositoryGraph:
         self._label = label or "Conversation"
         self._index_name = "conversation_embedding_index"
 
-    async def _store_conversations(
+    async def store_conversations(
             self,
             conversations: List[Dict[str, Any]]
     ) -> None:
@@ -94,20 +94,61 @@ class RepositoryGraph:
             records = await result.list()
             return [dict(record) for record in records]
 
+    async def fetch_all(self, keys: Dict[str, str]) -> List[Dict[str, Any]]:
+        """
+        Fetch all conversations matching the provided key-value filters.
+
+        Args:
+            keys: Dictionary of property names and values to filter by
+                  Example: {"user_id": "user_1", "session_id": "session_1"}
+
+        Returns:
+            List of conversations as dictionaries with all properties
+        """
+        if not keys:
+            # If no filters provided, return all conversations
+            query = f"MATCH (c:{self._label}) RETURN c"
+            params = {}
+        else:
+            # Build WHERE clauses dynamically
+            where_clauses = [f"c.{key} = ${key}" for key in keys.keys()]
+            where_clause = " AND ".join(where_clauses)
+
+            query = f"""
+                MATCH (c:{self._label})
+                WHERE {where_clause}
+                RETURN c.message_id AS message_id,
+                       c.user_id AS user_id,
+                       c.agent_id AS agent_id,
+                       c.session_id AS session_id,
+                       c.role AS role,
+                       c.content AS content,
+                       c.timestamp AS timestamp,
+                       c.embedding AS embedding
+                ORDER BY c.timestamp ASC
+            """
+            params = keys
+
+        async with self._driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.list()
+            return [dict(record) for record in records]
+
+
 if __name__ == '__main__':
     print("Inside repository graph.py")
     import asyncio
     rep_graph = RepositoryGraph(driver=None, embedding_model=None)
-    print(asyncio.run(rep_graph.store_conversations([
-        {
-            "message_id": "test_msg_iso_b",
-            "user_id": "test_user_a",
-            "agent_id": "test_agent_a",
-            "session_id": "test_session_iso_a",
-            "role": "human",
-            "content": "User B is related to User A",
-            "timestamp": "2026-10-31T10:00:00",
-            "embedding": None
-        }
-    ])))
-
+    # print(asyncio.run(rep_graph.store_conversations([
+    #     {
+    #         "message_id": "test_msg_iso_b",
+    #         "user_id": "test_user_a",
+    #         "agent_id": "test_agent_a",
+    #         "session_id": "test_session_iso_a",
+    #         "role": "human",
+    #         "content": "User B is related to User A",
+    #         "timestamp": "2026-10-31T10:00:00",
+    #         "embedding": None
+    #     }
+    # ])))
+    print(rep_graph.fetch_all({"user_id": "test_user_a"}))
