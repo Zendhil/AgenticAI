@@ -131,8 +131,8 @@ class RepositoryGraph:
 
         async with self._driver.session() as session:
             result = await session.run(query, **params)
-            records = await result.list()
-            return [dict(record) for record in records]
+            # Use data() to get list of dictionaries directly
+            return await result.data()
 
 
 if __name__ == '__main__':
@@ -151,4 +151,4 @@ if __name__ == '__main__':
     #         "embedding": None
     #     }
     # ])))
-    print(rep_graph.fetch_all({"user_id": "test_user_a"}))
+    print(asyncio.run(rep_graph.fetch_all({"user_id": "test_user_a"})))
