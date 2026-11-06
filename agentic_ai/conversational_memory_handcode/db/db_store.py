@@ -13,7 +13,7 @@ class DBStore(ABC):
     def __init__(self):
         pass
     @abstractmethod
-    async def retrieve(self):
+    async def fetch_all(self):
         pass
 
     @abstractmethod
@@ -35,8 +35,14 @@ class Neo4j(DBStore):
     async def store_conversations(self, messages):
         await self._graph_connector.store_conversations(messages)
 
-    async def retrieve(self):
-        pass
+    async def fetch_all(self,**kwargs):
+        try:
+            messages = await self._graph_connector.fetch_all(kwargs)
+            return messages
+        except Exception as e:
+            logger.error(e)
+            raise e
+
 
 
 
@@ -59,5 +65,5 @@ if __name__ == "__main__":
             "timestamp": "2026-10-31T10:00:00"
         }
     ]
-    asyncio.run(graph_db.store_conversations(conversations))
-
+    # asyncio.run(graph_db.store_conversations(conversations))
+    asyncio.run(graph_db.fetch_all(**{"user_id": "test_user_a"}))

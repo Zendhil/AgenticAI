@@ -60,7 +60,7 @@ class LongTermMemoryManager:
     async def _fetch_relevant_info(self)->list[Message]:
         pass
 
-    async def _fetch_all(self, **kwargs)->list[Message]:
+    async def fetch_all(self, **kwargs)->list[Message]:
         """
                 Retrieves user relevant information from database.
                 params: user_id for which info has to be retrieved
@@ -71,7 +71,12 @@ class LongTermMemoryManager:
         """
 
         logger.info("Inside class LongTermMemoryManager, function _fetch_all")
-        if kwargs.get("User_id"):
+        try:
+            messages = await self._db_obj.fetch_all(kwargs)
+            return messages
+        except Exception as e:
+            logger.error(f"Error fetching relevant info from GraphDB: {e}")
+            raise
 
 
 
@@ -85,4 +90,5 @@ class LongTermMemoryManager:
 if __name__ == "__main__":
     import asyncio
     ltm = asyncio.run(LongTermMemoryManager.create(db_store="Neo4j"))
-    print(ltm)
+    # print(ltm)
+    print(asyncio.run(ltm.fetch_all(**{"user_id": "test_user_a"})))
