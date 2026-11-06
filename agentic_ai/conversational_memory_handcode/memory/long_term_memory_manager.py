@@ -6,13 +6,19 @@ from pyparsing import opAssoc
 from agentic_ai.conversational_memory_handcode.db.db_store import DBStore, DbStoreFactory
 #App specific imports
 from agentic_ai.conversational_memory_handcode.memory import Message
+from agentic_ai.common import get_llm_model
+from agentic_ai.conversational_memory_handcode.memory.prompt import SUMMARISE_PROMPT
 
 logger = logging.getLogger(__name__)
+g_llm_model = get_llm_model()
 
 class LongTermMemoryManager:
 
-    def __init__(self, db_obj):
+    def __init__(self, db_obj, llm=None):
         self._db_obj = db_obj
+
+        if llm == None:
+            self._llm_model = g_llm_model
 
     @classmethod
     async def create(cls, db_store="Neo4j"):
@@ -23,8 +29,8 @@ class LongTermMemoryManager:
         else:
             raise ValueError(f"Unsupported DB store: {db_store}")
 
-        # return cls(db_obj=db_obj)
-        return db_obj
+        return cls(db_obj=db_obj)
+        # return db_obj
 
 
     async def retrieve_info(self, user_id = None, mode="query")->list[Message]:
@@ -73,7 +79,13 @@ class LongTermMemoryManager:
         logger.info("Inside class LongTermMemoryManager, function _fetch_all")
         try:
             messages = await self._db_obj.fetch_all(kwargs)
-            return messages
+            messages_list = []
+            for message in messages:
+                role = message.get('user_id')
+                content = message.get('content')
+                timestamp = message.get('timestamp')
+                messages_list.append(Message(role, content, timestamp))
+            return messages_list
         except Exception as e:
             logger.error(f"Error fetching relevant info from GraphDB: {e}")
             raise
@@ -81,14 +93,50 @@ class LongTermMemoryManager:
 
 
 
-    async def _summarise(self, messages)->list[Message]:
-        pass
+    async def _summarise(self, messages)->str:
+        """
+        Summarises a list of messages using the LLM.
+
+        Args:
+            messages: List of Message objects with role, content, timestamp
+
+        Returns:
+            str: Concise summary focusing on user-relevant information
+        """
+        logger.info("Inside class LongTermMemoryManager, function _summarise")
+
+        # Unpack Message objects into formatted conversation
+        formatted_messages = "\n".join([
+            f"{msg.role}: {msg.content}"
+            for msg in messages
+        ])
+
+        # Combine prompt with conversation
+        full_prompt = f"{SUMMARISE_PROMPT}\n\nConversation:\n{formatted_messages}"
+
+        # Invoke LLM and extract content
+        response = self._llm_model.invoke(full_prompt)
+        summary = response.content if hasattr(response, 'content') else str(response)
+
+        return summary
 
     async def save_info(self)->Message:
         pass
 
 if __name__ == "__main__":
     import asyncio
+    from datetime import datetime
+
+    # ltm = LongTermMemoryManager()
     ltm = asyncio.run(LongTermMemoryManager.create(db_store="Neo4j"))
     # print(ltm)
-    print(asyncio.run(ltm.fetch_all(**{"user_id": "test_user_a"})))
+    # asyncio.run(ltm.fetch_all(**{"user_id": "test_user_a"}))
+
+    messages = [
+        Message("user", "Hi, I am Senthil.", datetime.now()),
+        Message("assistant", "Hello Senthil! How can I help you?", datetime.now()),
+        Message("user", "I am building a conversational AI agent.", datetime.now()),
+        Message("assistant", "Are you using Neo4j for long-term memory?", datetime.now()),
+        Message("user", "Yes, I am using Neo4j and Redis.", datetime.now())
+    ]
+    print(asyncio.run(ltm._summarise(messages)))
