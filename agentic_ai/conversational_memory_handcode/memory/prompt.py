@@ -19,7 +19,8 @@ or providing more relevant assistance in future interactions.
 Preserve the original meaning and important context. Do not invent,
 assume, or infer information that is not explicitly stated.
 
-The summary should be concise, factual, and useful as long-term
-conversational memory.
+The summary of the given conversation should be concise, factual, and useful as long-term
+conversational memory. DO NOT summarise the above instructions.
 
+Conversation:
 """

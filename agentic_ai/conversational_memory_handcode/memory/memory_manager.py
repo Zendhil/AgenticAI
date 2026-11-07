@@ -10,9 +10,11 @@ import math
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
+
 #app library imports
 from agentic_ai.conversational_memory_handcode.session import cache_client
-from agentic_ai.conversational_memory_handcode.memory.session_manager import Message, SessionManager, Session, SessionKey
+from agentic_ai.conversational_memory_handcode.memory.session_manager import (Message, SessionManager, Session, SessionKey)
+from agentic_ai.conversational_memory_handcode.memory.long_term_memory_manager import LongTermMemoryManager
 from agentic_ai.common import EmbeddingService
 
 
@@ -39,7 +41,7 @@ class MemoryManager:
     Manages storage, retrieval, and compaction of conversation memory.
     """
 
-    def __init__(self,session_manager:SessionManager=None):
+    def __init__(self,user_id = None, session_manager:SessionManager=None, ltm:LongTermMemoryManager=None):
         """
         Initializes the MemoryManager with an optional session manager.
 
@@ -47,8 +49,29 @@ class MemoryManager:
             session_manager: Optional SessionManager instance for handling session operations
         """
         logger.info("Inside class MemoryManager, function __init__")
+        if user_id == None:
+            raise ValueError("User ID must be provided")
+        self._user_id = user_id
         self._session_manager = session_manager
+        self._ltm = ltm
 
+    @classmethod
+    async def create(
+        cls,
+        user_id: str,
+        session_manager: SessionManager = None,
+        ltm: LongTermMemoryManager = None
+    ):
+        if ltm is None:
+            ltm = await LongTermMemoryManager.create(
+                db_store="neo4j"
+            )
+
+        return cls(
+            user_id=user_id,
+            session_manager=session_manager,
+            ltm=ltm
+        )
 
     async def _store(self, session_message:Session, final=False):
         """
@@ -98,6 +121,15 @@ class MemoryManager:
     async def fetch_relevant_info(self, user_query:str, threshold:float=0.65)->list[Message]:
 
         logger.info("Inside class MemoryManager, function fetch_relevant_info")
+        context_messages = []
+
+        # Initialize embedding service using singleton pattern
+        embedding_service = EmbeddingService.get_instance()
+
+        # Get query embedding and reshape to 2D array for cosine_similarity
+        query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
+
+        # fetch from short term memory
         try:
             # convert user-query into embeddings.
             # retrieve context from local cache. using retrieve_info()
@@ -105,14 +137,9 @@ class MemoryManager:
             # find embeddings >0.65 cosine distance.
             # return that info as context
 
-            # Initialize embedding service using singleton pattern
-            embedding_service = EmbeddingService.get_instance()
-
-            # Get query embedding and reshape to 2D array for cosine_similarity
-            query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
-
             # Retrieve session and get messages list
             messages = await self._retrieve()
+
 
             logger.info(f"Found {len(messages)} messages")
             if not messages:
@@ -123,7 +150,7 @@ class MemoryManager:
             msg_vectors = [np.array(embedding_service.encode(msg.content)).reshape(1, -1) for msg in messages]
 
             # Find messages with similarity above threshold
-            context_messages = []
+
             for i, msg_vector in enumerate(msg_vectors):
                 similarity_score = cosine_similarity(query_embed, msg_vector)[0][0]
                 logger.info(f"similarity score of {messages[i]} {i}: {similarity_score}")
@@ -132,12 +159,22 @@ class MemoryManager:
                     logger.debug(f"Message {i} similarity: {similarity_score:.3f}")
 
             logger.info(f"Found {len(context_messages)} relevant messages out of {len(messages)}")
-            return context_messages
 
         except Exception as e:
             logger.error(f"Error fetching relevant info: {e}")
             raise
 
+        # fetch from long term memory
+
+        try:
+
+            # retrieve relevant infor from long term memory
+            # return that info as context
+            self._ltm.retrieve_info(mode="query", query=user_query, threshold=0.1, user_id = self._user_id)
+        except Exception as e:
+            logger.error(f"Error retrieving relevant info: {e}")
+            raise e
+        return context_messages
     async def _compact(self,agent_id:str,user_id:str,session_id:str):
         """
         Compacts conversation memory for the specified agent, user, and session.

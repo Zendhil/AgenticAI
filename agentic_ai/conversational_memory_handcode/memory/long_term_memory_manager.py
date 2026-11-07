@@ -1,13 +1,14 @@
 #standard library imports
 import logging
-
+from typing import Any
 from pyparsing import opAssoc
 
 from agentic_ai.conversational_memory_handcode.db.db_store import DBStore, DbStoreFactory
 #App specific imports
-from agentic_ai.conversational_memory_handcode.memory import Message
-from agentic_ai.common import get_llm_model
+from agentic_ai.conversational_memory_handcode.memory.session_manager import Message
 from agentic_ai.conversational_memory_handcode.memory.prompt import SUMMARISE_PROMPT
+from agentic_ai.common import get_llm_model
+
 
 logger = logging.getLogger(__name__)
 g_llm_model = get_llm_model()
@@ -33,7 +34,7 @@ class LongTermMemoryManager:
         # return db_obj
 
 
-    async def retrieve_info(self, user_id = None, mode="query")->list[Message]:
+    async def retrieve_info(self,mode="query", query=None, threshold=0.65, **kwargs)->Any:
         """
         Retrieves user relevant information from database.
         params: user_id for which info has to be retrieved
@@ -44,12 +45,14 @@ class LongTermMemoryManager:
         """
         logger.info("Inside class LongTermMemoryManager, function _retrieve_info")
 
-        if user_id == None:
-            raise ValueError("user_id is required")
+        # if user_id == None:
+        #     raise ValueError("user_id is required")
 
         if mode == "query":
             try:
-                messages = await self._fetch_relevant_info()
+                if not query:
+                    raise ValueError("query is required")
+                messages = await self._fetch_relevant_info(query, threshold, **kwargs)
                 return messages
             except Exception as e:
                 logger.error(f"Error fetching relevant info from GraphDB: {e}")
@@ -63,10 +66,27 @@ class LongTermMemoryManager:
                 logger.error(f"Error summarising user info from GraphDB: {e}")
                 raise
 
-    async def _fetch_relevant_info(self)->list[Message]:
-        pass
+    async def _fetch_relevant_info(self, query, threshold, **kwargs)->list[Message]:
 
-    async def fetch_all(self, **kwargs)->list[Message]:
+        logger.info("Inside class LongTermMemoryManager, function _fetch_relevant_info")
+
+        try:
+            messages = await self._db_obj.fetch_relevant_info(query, threshold, **kwargs)
+            message_list=[]
+            for message in messages:
+               role = message.get('user_id')
+               content = message.get('content')
+               timestamp = message.get('timestamp')
+               message_list.append(Message(role, content, timestamp))
+            return message_list
+        except Exception as e:
+            logger.error(f"Error fetching relevant info from GraphDB: {e}")
+            raise e
+
+
+
+
+    async def _fetch_all(self, **kwargs)->list[Message]:
         """
                 Retrieves user relevant information from database.
                 params: user_id for which info has to be retrieved
@@ -139,4 +159,5 @@ if __name__ == "__main__":
         Message("assistant", "Are you using Neo4j for long-term memory?", datetime.now()),
         Message("user", "Yes, I am using Neo4j and Redis.", datetime.now())
     ]
-    print(asyncio.run(ltm._summarise(messages)))
+    # print(asyncio.run(ltm._summarise(messages)))
+    print(asyncio.run(ltm.retrieve_info(mode="query",query="Secret message", threshold=0.1, user_id="test_user_a")))

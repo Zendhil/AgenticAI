@@ -44,6 +44,14 @@ class Neo4j(DBStore):
             raise e
 
 
+    async def fetch_relevant_info(self,query, threshold, **kwargs):
+        try:
+            messages = await self._graph_connector.fetch_relevant_info(query, threshold, **kwargs)
+            return messages
+        except Exception as e:
+            logger.error(e)
+            raise e
+
 
 
 
@@ -66,4 +74,6 @@ if __name__ == "__main__":
         }
     ]
     # asyncio.run(graph_db.store_conversations(conversations))
-    asyncio.run(graph_db.fetch_all(**{"user_id": "test_user_a"}))
+    # asyncio.run(graph_db.fetch_all(**{"user_id": "test_user_a"}))
+
+    print(asyncio.run(graph_db.fetch_relevant_info(query="secret", **{"user_id": "test_user_a"})))

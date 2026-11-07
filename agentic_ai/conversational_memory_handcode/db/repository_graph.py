@@ -3,11 +3,19 @@
 # standard libraries
 from typing import List, Dict, Any
 import logging
+import numpy as np
+
 # app libraies
-from agentic_ai.common import get_graph_driver, get_embedding_model
+from agentic_ai.common import get_graph_driver, get_embedding_model, EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+def is_embedding(query) -> bool:
+    return (
+        isinstance(query, (list, np.ndarray))
+        and len(query) > 0
+        and all(isinstance(x, (int, float)) for x in query)
+    )
 class RepositoryGraph:
 
     def __init__(self, driver=None, embedding_model=None, label=None):
@@ -134,6 +142,55 @@ class RepositoryGraph:
             # Use data() to get list of dictionaries directly
             return await result.data()
 
+    async def fetch_relevant_info(self, user_query, threshold = 0.65, **kwargs) -> List[Dict[str, Any]]:
+
+        # check if query is an embedding, else create embedding.
+        if not user_query:
+            raise ValueError("Empty query")
+
+
+        if not (is_embedding(user_query)):
+            embedding_service = EmbeddingService.get_instance()
+            query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
+        else:
+            query_embed = user_query
+
+        if not kwargs:
+            # If no filters provided, return all conversations
+            query = f"MATCH (c:{self._label}) RETURN c"
+            params = {}
+        else:
+            # Build WHERE clauses dynamically
+            where_clauses = [f"c.{key} = ${key}" for key in kwargs.keys()]
+            where_clause = " AND ".join(where_clauses)
+
+            query = f"""
+                MATCH (c:{self._label})
+                WHERE {where_clause}
+
+                WITH c, vector.similarity.cosine(c.embedding, $query_embed) AS similarity
+                WHERE similarity >= $threshold
+
+                RETURN c.message_id AS message_id,
+                       c.user_id AS user_id,
+                       c.agent_id AS agent_id,
+                       c.session_id AS session_id,
+                       c.role AS role,
+                       c.content AS content,
+                       c.timestamp AS timestamp,
+                       c.embedding AS embedding,
+                       similarity
+
+                    ORDER BY similarity DESC, c.timestamp DESC
+            """
+            params = kwargs
+            params['query_embed'] = query_embed
+            params['threshold'] = threshold
+
+        async with self._driver.session() as session:
+            result = await session.run(query, **params)
+            # Use data() to get list of dictionaries directly
+            return await result.data()
 
 if __name__ == '__main__':
     print("Inside repository graph.py")
