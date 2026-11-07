@@ -151,14 +151,36 @@ class RepositoryGraph:
 
         if not (is_embedding(user_query)):
             embedding_service = EmbeddingService.get_instance()
-            query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
+            # Convert to Python list - Neo4j expects 1D list, not 2D numpy array
+            query_embed = embedding_service.encode(user_query)
         else:
-            query_embed = user_query
+            # If already an embedding, ensure it's a list
+            query_embed = user_query.tolist() if isinstance(user_query, np.ndarray) else user_query
 
         if not kwargs:
-            # If no filters provided, return all conversations
-            query = f"MATCH (c:{self._label}) RETURN c"
-            params = {}
+            # If no filters provided, still use embedding-based search
+            query = f"""
+                MATCH (c:{self._label})
+
+                WITH c, vector.similarity.cosine(c.embedding, $query_embed) AS similarity
+                WHERE similarity >= $threshold
+
+                RETURN c.message_id AS message_id,
+                       c.user_id AS user_id,
+                       c.agent_id AS agent_id,
+                       c.session_id AS session_id,
+                       c.role AS role,
+                       c.content AS content,
+                       c.timestamp AS timestamp,
+                       c.embedding AS embedding,
+                       similarity
+
+                ORDER BY similarity DESC, c.timestamp DESC
+            """
+            params = {
+                'query_embed': query_embed,
+                'threshold': threshold
+            }
         else:
             # Build WHERE clauses dynamically
             where_clauses = [f"c.{key} = ${key}" for key in kwargs.keys()]
@@ -208,4 +230,5 @@ if __name__ == '__main__':
     #         "embedding": None
     #     }
     # ])))
-    print(asyncio.run(rep_graph.fetch_all({"user_id": "test_user_a"})))
+    # print(asyncio.run(rep_graph.fetch_all({"user_id": "test_user_a"})))
+    print(asyncio.run(rep_graph.fetch_relevant_info(user_query="Hello, Secret Message",**{"user_id": "test_user_a"})))
