@@ -64,7 +64,7 @@ class MemoryManager:
     ):
         if ltm is None:
             ltm = await LongTermMemoryManager.create(
-                db_store="neo4j"
+
             )
 
         return cls(
@@ -118,60 +118,75 @@ class MemoryManager:
             raise
         return session_info
 
-    async def fetch_relevant_info(self, user_query:str, threshold:float=0.65)->list[Message]:
+    async def fetch_relevant_info(self, user_query:str=None, threshold:float=0.65):
 
         logger.info("Inside class MemoryManager, function fetch_relevant_info")
         context_messages = []
 
-        # Initialize embedding service using singleton pattern
-        embedding_service = EmbeddingService.get_instance()
+        # retrieve relevant infor from long term memory
+        # return that info as context
+        if user_query:
+            mode = "query"
+        else:
+            mode = "summary"
 
-        # Get query embedding and reshape to 2D array for cosine_similarity
-        query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
+        if mode == "query":
+            # Initialize embedding service using singleton pattern
+            embedding_service = EmbeddingService.get_instance()
 
-        # fetch from short term memory
-        try:
-            # convert user-query into embeddings.
-            # retrieve context from local cache. using retrieve_info()
-            # convert each message in list into embddings.
-            # find embeddings >0.65 cosine distance.
-            # return that info as context
+            # Get query embedding and reshape to 2D array for cosine_similarity
+            query_embed = np.array(embedding_service.encode(user_query)).reshape(1, -1)
 
-            # Retrieve session and get messages list
-            messages = await self._retrieve()
+            # fetch from short term memory
+            try:
+                # convert user-query into embeddings.
+                # retrieve context from local cache. using retrieve_info()
+                # convert each message in list into embddings.
+                # find embeddings >0.65 cosine distance.
+                # return that info as context
+
+                # Retrieve session and get messages list
+                messages = await self._retrieve()
 
 
-            logger.info(f"Found {len(messages)} messages")
-            if not messages:
-                logger.warning("No messages found in session")
-                return []
+                logger.info(f"Found {len(messages)} messages")
+                if not messages:
+                    logger.warning("No messages found in session")
+                    return []
 
-            # Encode all message contents and convert to numpy arrays
-            msg_vectors = [np.array(embedding_service.encode(msg.content)).reshape(1, -1) for msg in messages]
+                # Encode all message contents and convert to numpy arrays
+                msg_vectors = [np.array(embedding_service.encode(msg.content)).reshape(1, -1) for msg in messages]
 
-            # Find messages with similarity above threshold
+                # Find messages with similarity above threshold
 
-            for i, msg_vector in enumerate(msg_vectors):
-                similarity_score = cosine_similarity(query_embed, msg_vector)[0][0]
-                logger.info(f"similarity score of {messages[i]} {i}: {similarity_score}")
-                if similarity_score >= threshold:
-                    context_messages.append(messages[i])
-                    logger.debug(f"Message {i} similarity: {similarity_score:.3f}")
+                for i, msg_vector in enumerate(msg_vectors):
+                    similarity_score = cosine_similarity(query_embed, msg_vector)[0][0]
+                    logger.info(f"similarity score of {messages[i]} {i}: {similarity_score}")
+                    if similarity_score >= threshold:
+                        context_messages.append(messages[i])
+                        logger.debug(f"Message {i} similarity: {similarity_score:.3f}")
 
-            logger.info(f"Found {len(context_messages)} relevant messages out of {len(messages)}")
+                logger.info(f"Found {len(context_messages)} relevant messages out of {len(messages)}")
 
-        except Exception as e:
-            logger.error(f"Error fetching relevant info: {e}")
-            raise
+            except Exception as e:
+                logger.error(f"Error fetching relevant info: {e}")
+                raise
 
         # fetch from long term memory
 
         try:
+            ltm_result = await self._ltm.retrieve_info(mode=mode, query=user_query, threshold=0.1, user_id = self._user_id)
 
-            # retrieve relevant infor from long term memory
-            # return that info as context
-            messages = await self._ltm.retrieve_info(mode="query", query=user_query, threshold=0.1, user_id = self._user_id)
-            context_messages.extend(messages)
+            # If mode is summary, return the string directly
+            # If mode is query, ltm_result is a list of Messages
+            if mode == "summary":
+                return ltm_result  # Return string summary directly
+            else:
+                # Extend context_messages with the list of messages from LTM
+                if isinstance(ltm_result, list):
+                    context_messages.extend(ltm_result)
+                else:
+                    context_messages.append(ltm_result)
         except Exception as e:
             logger.error(f"Error retrieving long term relevant info: {e}")
             raise e

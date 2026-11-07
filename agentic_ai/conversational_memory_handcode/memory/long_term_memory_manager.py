@@ -98,7 +98,7 @@ class LongTermMemoryManager:
 
         logger.info("Inside class LongTermMemoryManager, function _fetch_all")
         try:
-            messages = await self._db_obj.fetch_all(kwargs)
+            messages = await self._db_obj.fetch_all(**kwargs)
             messages_list = []
             for message in messages:
                 role = message.get('user_id')

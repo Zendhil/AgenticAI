@@ -1,13 +1,11 @@
 #standard libarary imports
 import uuid
 import logging
-from pyexpat.errors import messages
 from typing import Any, List
 import asyncio
 import datetime
 #Thrid party imports
-from langchain.agents import create_agent
-from langchain.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 # App imports
 from agentic_ai.common import get_llm_model, get_embedding_model
 from agentic_ai.conversational_memory_handcode.memory import MemoryManager, SessionManager, SessionKey, Session, Message
@@ -32,10 +30,10 @@ class ChatAgent:
         self._session_key = SessionKey(session_id=None, user_id=user_id, agent_id=agent_id)
         logger.info(f"Session Key:{self._session_key}")
         self._session_manager = SessionManager(session_key=self._session_key)
-        self._memory_manager = MemoryManager(session_manager=self._session_manager)
+        self._memory_manager = MemoryManager(user_id = user_id,session_manager=self._session_manager)
 
 
-    async def chat(self, commit_threshold = 6):
+    async def chat(self, user_id=None,commit_threshold = 6):
 
         messages = []
         response = []
@@ -50,6 +48,23 @@ class ChatAgent:
         #     logger.error(f"In ChatAgent: chat: Error {e}")
         #
         saved_messages = 0
+        if user_id:
+            mm = await MemoryManager.create(user_id=user_id)
+            summary = await mm.fetch_relevant_info()  # Returns string when no query provided
+            print("Summary:",summary)
+            # Summary should be a string from long-term memory
+            if isinstance(summary, str):
+                messages.append(AIMessage(content=summary))
+                self._message_count += 1  # Increment count for summary
+            elif isinstance(summary, list):
+                # If it's a list of Messages, add them all
+                for msg in summary:
+                    if isinstance(msg, Message):
+                        messages.append(AIMessage(content=msg.content))
+                        self._message_count += 1  # Increment for each message
+                    else:
+                        messages.append(msg)
+                        self._message_count += 1  # Increment for each message
         while True:
             input_message = input("User:")
 
@@ -65,22 +80,19 @@ class ChatAgent:
                     raise e
             else:
                 # on exit, save all the pending messages
-                if len(messages):
+                if len(messages) > saved_messages:
                     logger.info("Saving messages on exit")
-                    session_info = await self.store_messages(messages[saved_messages:self._message_count], timestamp=datetime.datetime.now())
+                    session_info = await self.store_messages(messages[saved_messages:], timestamp=datetime.datetime.now())
                     await self._session_manager.save_session(session_info)
                 break
 
-            if len(messages) == commit_threshold:
-                # call session store to commit. - Done
-                # continue from here... build session messages. messages has to unwrap human and AI.. so it needs a method for wrapping and unwrapping.
-                # check messages dataclass.. how session, sessionkey, messages and Human and AI messaegs are orgainsed. thenc commit.
-                # then write the retrieve from long DB.
-                logger.info("Saving messages on threshold")
+            if self._message_count - saved_messages >= commit_threshold:
+                logger.info(f"Saving messages on threshold: {self._message_count - saved_messages} messages")
 
+                # Save all messages from last save point to current position
                 session_info = await self.store_messages(messages[saved_messages:self._message_count], timestamp=datetime.datetime.now())
                 await self._session_manager.save_session(session_info)
-                #flush
+                # Update the save point
                 saved_messages = self._message_count
 
         print("Messages:",messages)
@@ -111,5 +123,5 @@ if __name__ == "__main__":
     agent_id = "Agent1234"
     user_id = "CBCID"
     chat_ag = ChatAgent(user_id = user_id,llm=None,agent_id = agent_id)
-    asyncio.run(chat_ag.chat())
+    asyncio.run(chat_ag.chat(user_id="test_user_a"))
     # print(ChatAgent.embedding_model.encode("Whats your name"))
