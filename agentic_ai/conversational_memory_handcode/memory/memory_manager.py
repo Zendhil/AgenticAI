@@ -170,9 +170,10 @@ class MemoryManager:
 
             # retrieve relevant infor from long term memory
             # return that info as context
-            self._ltm.retrieve_info(mode="query", query=user_query, threshold=0.1, user_id = self._user_id)
+            messages = await self._ltm.retrieve_info(mode="query", query=user_query, threshold=0.1, user_id = self._user_id)
+            context_messages.extend(messages)
         except Exception as e:
-            logger.error(f"Error retrieving relevant info: {e}")
+            logger.error(f"Error retrieving long term relevant info: {e}")
             raise e
         return context_messages
     async def _compact(self,agent_id:str,user_id:str,session_id:str):
