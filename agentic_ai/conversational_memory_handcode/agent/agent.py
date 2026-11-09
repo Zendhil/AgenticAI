@@ -7,7 +7,7 @@ import datetime
 #Thrid party imports
 from langchain_core.messages import AIMessage, HumanMessage
 # App imports
-from agentic_ai.common import get_llm_model, get_embedding_model
+from agentic_ai.common import Config, get_embedding_model
 from agentic_ai.conversational_memory_handcode.memory import MemoryManager, SessionManager, SessionKey, Session, Message
 from agentic_ai.conversational_memory_handcode.agent.prompt import PROMPT
 
@@ -20,17 +20,17 @@ class ChatAgent:
     # default_llm = get_llm_model()
     embedding_model = get_embedding_model()
 
-    def __init__(self,user_id:str, llm:Any,agent_id:str="Agent1234"):
+    def __init__(self,user_id:str, llm:Any,agent_id:str="Agent1234", session_manager:SessionManager=None, memory_manager:MemoryManager=None):
         self._agent_id= agent_id or uuid.uuid4()
         if user_id is None:
             user_id = input("Enter your user_id:")
         self._user_id = user_id
-        self._llm = llm or get_llm_model()
+        self._llm = llm or Config.get_instance().get_llm_model()
         self._message_count = 0
         self._session_key = SessionKey(session_id=None, user_id=user_id, agent_id=agent_id)
         logger.info(f"Session Key:{self._session_key}")
-        self._session_manager = SessionManager(session_key=self._session_key)
-        self._memory_manager = MemoryManager(user_id = user_id,session_manager=self._session_manager)
+        self._session_manager = session_manager or SessionManager(session_key=self._session_key)
+        self._memory_manager = memory_manager or MemoryManager(user_id = user_id,session_manager=self._session_manager)
 
 
     async def chat(self, user_id=None,commit_threshold = 6):

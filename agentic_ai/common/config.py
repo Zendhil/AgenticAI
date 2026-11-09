@@ -21,12 +21,20 @@ MODEL_CONFIG_FILE = base_dir.joinpath("llm_models.yaml")
 
 
 class Config:
+    _instance = None
     def __init__(self):
         self._config:dict=self._load_models_config()
         logging.basicConfig(
             level=self._config.get("logging_settings").get("log_level"),
             format="%(asctime)s | %(name)s | %(levelname)s | %(message)s"
         )
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = Config()
+
+        return cls._instance
+
     def _load_models_config(self)->dict:
 
         try:
@@ -68,7 +76,8 @@ class Config:
 config = Config()  #singleton class
 get_config = config._get_config
 get_embeddings_model = config.get_embeddings_model
-get_llm_model = config.get_llm_model
+# get_llm_model = config.get_llm_model
+
 
 
 class EmbeddingService:
